@@ -3,6 +3,36 @@
 from dataclasses import dataclass
 from typing import List, Optional
 from sdfgen import SystemDescription
+from importlib.metadata import version
+
+ProtectionDomain = SystemDescription.ProtectionDomain
+
+# This file is imported by most of our meta.py scripts, so add this check
+# here so that we can catch this error consistently.
+assert version("sdfgen").split(".")[1] == "35", "Unexpected sdfgen version"
+
+
+def add_x86_hpet(sdf: SystemDescription, timer_driver: ProtectionDomain):
+    # Timer IRQ must be the highest priority (highest vector) to ensure they are delivered
+    # as close as possible to the timer expiry. The highest vector is defined by (irq_user_max - irq_user_min) in seL4 source
+    # Since our HPET driver uses legacy IRQ routing, comparator 0's IRQ will always arrives at
+    # I/O APIC 0's pin 2.
+    hpet_irq = SystemDescription.IrqIoapic(
+        ioapic_id=0,
+        pin=2,
+        vector=107,
+        id=0,
+        trigger=SystemDescription.IrqIoapic.Trigger.EDGE,
+    )
+    timer_driver.add_irq(hpet_irq)
+
+    # paddr=0xFED00000 is a x86 convention for HPET, though it may be different on some machines depending on their BIOS.
+    hpet_regs = SystemDescription.MemoryRegion(
+        sdf, "hpet_regs", 0x1000, paddr=0xFED00000
+    )
+    hpet_regs_map = SystemDescription.Map(hpet_regs, 0x5000_0000, "rw", cached=False)
+    timer_driver.add_map(hpet_regs_map)
+    sdf.add_mr(hpet_regs)
 
 
 @dataclass
@@ -68,6 +98,14 @@ BOARDS: List[Board] = [
         ethernet="soc@0/bus@30800000/ethernet@30be0000",
     ),
     Board(
+        name="kria_k26",
+        arch=SystemDescription.Arch.AARCH64,
+        paddr_top=0x70000000,
+        timer="axi/timer@ff140000",
+        serial="axi/serial@ff010000",
+        ethernet="axi/ethernet@ff0e0000",
+    ),
+    Board(
         name="maaxboard",
         arch=SystemDescription.Arch.AARCH64,
         paddr_top=0x70000000,
@@ -125,11 +163,20 @@ BOARDS: List[Board] = [
         baud_rate=1500000,
     ),
     Board(
+        name="rockpro64",
+        arch=SystemDescription.Arch.AARCH64,
+        paddr_top=0xF7000000,
+        serial="serial@ff1a0000",
+        # https://github.com/u-boot/u-boot/blob/v2024.10/configs/rockpro64-rk3399_defconfig#L77
+        baud_rate=1500000,
+    ),
+    Board(
         name="rpi4b_1gb",
         arch=SystemDescription.Arch.AARCH64,
         paddr_top=0x2_000_000,
         serial="soc/serial@7e215040",
         timer="soc/timer@7e003000",
+        ethernet="scb/ethernet@7d580000",
     ),
     Board(
         name="serengeti",
@@ -150,12 +197,20 @@ BOARDS: List[Board] = [
     Board(
         name="zcu102",
         arch=SystemDescription.Arch.AARCH64,
-        paddr_top=0xA0000000,
+        paddr_top=0x80000000,
         timer="axi/timer@ff140000",
         serial="axi/serial@ff000000",
+        ethernet="axi/ethernet@ff0e0000",
     ),
     Board(
         name="x86_64_generic",
+        arch=SystemDescription.Arch.X86_64,
+        paddr_top=0x70000000,
+        timer=None,
+        serial=None,
+    ),
+    Board(
+        name="x86_64_generic_vtx",
         arch=SystemDescription.Arch.X86_64,
         paddr_top=0x7FFDF000,
         timer=None,

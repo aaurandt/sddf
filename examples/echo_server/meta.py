@@ -8,14 +8,11 @@ import subprocess
 import shutil
 from typing import List, Tuple, Callable, Optional
 from sdfgen import SystemDescription, Sddf, DeviceTree
-from importlib.metadata import version
 
 sys.path.append(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../tools/meta")
 )
-from board import BOARDS
-
-assert version("sdfgen").split(".")[1] == "28", "Unexpected sdfgen version"
+from board import BOARDS, add_x86_hpet
 
 ProtectionDomain = SystemDescription.ProtectionDomain
 MemoryRegion = SystemDescription.MemoryRegion
@@ -88,6 +85,7 @@ class BenchmarkConfig:
         core: int,
         last_core: bool,
         children: List[Tuple[int, str]],
+        pmu_events: List[int],
     ):
         self.ch_rx_start = ch_rx_start
         self.ch_tx_start = ch_tx_start
@@ -97,6 +95,7 @@ class BenchmarkConfig:
         self.core = core
         self.last_core = last_core
         self.children = children
+        self.pmu_events = pmu_events
 
     """
         Matches struct definition:
@@ -113,12 +112,14 @@ class BenchmarkConfig:
                 char [64];
                 uint8_t;
             } [64];
+            uint8_t [6];
+            uint8_t;
         }
     """
 
     def serialise(self) -> bytes:
         child_config_format = "c" * 65
-        pack_str = "<BBBBBB?B" + child_config_format * 64
+        pack_str = "<BBBBBB?B" + child_config_format * 64 + "BBBBBBB"
         child_bytes = bytearray()
         for child in self.children:
             c_name = child[1].encode("utf-8")
@@ -131,6 +132,10 @@ class BenchmarkConfig:
 
         child_bytes_list = [x.to_bytes(1, "little") for x in child_bytes]
 
+        num_pmu_events = len(self.pmu_events)
+        assert num_pmu_events <= 6
+        self.pmu_events.extend(0 for i in range(6 - num_pmu_events))
+
         return struct.pack(
             pack_str,
             self.ch_rx_start,
@@ -142,6 +147,8 @@ class BenchmarkConfig:
             self.last_core,
             len(self.children),
             *child_bytes_list,
+            *self.pmu_events,
+            num_pmu_events,
         )
 
 
@@ -155,7 +162,7 @@ def copy_elf(source_elf: str, new_elf: str, elf_number=None):
     return shutil.copyfile(source_elf, new_elf)
 
 
-# Assumes elf string has ".elf" suffix, and ".data" to data string
+# Assumes elf string has ".elf" suffix, adds ".data" to data string
 def update_elf_section(
     elf_name: str, section_name: str, data_name: str, data_number=None
 ):
@@ -182,6 +189,7 @@ def generate(
     output_dir: str,
     dtb: Optional[DeviceTree],
     get_core: Callable[[str], int],
+    pmu_event_ids: List[int],
 ):
     uart_node = None
     ethernet_node = None
@@ -195,29 +203,13 @@ def generate(
         assert timer_node is not None
 
     timer_driver = ProtectionDomain(
-        "timer_driver", "timer_driver.elf", priority=101, cpu=get_core("timer_driver")
+        "timer_driver", "timer_driver.elf", priority=102, cpu=get_core("timer_driver")
     )
     timer_system = Sddf.Timer(sdf, timer_node, timer_driver)
 
     if board.arch == SystemDescription.Arch.X86_64:
-        hpet_irq = SystemDescription.IrqMsi(
-            pci_bus=0, pci_device=0, pci_func=0, vector=0, handle=0, id=0
-        )
-        timer_driver.add_irq(hpet_irq)
+        add_x86_hpet(sdf, timer_driver)
 
-        hpet_regs = SystemDescription.MemoryRegion(
-            sdf, "hpet_regs", 0x1000, paddr=0xFED00000
-        )
-        hpet_regs_map = SystemDescription.Map(
-            hpet_regs, 0x5000_0000, "rw", cached=False
-        )
-        timer_driver.add_map(hpet_regs_map)
-        sdf.add_mr(hpet_regs)
-
-    uart_driver = ProtectionDomain("serial_driver", "serial_driver.elf", priority=100)
-    serial_virt_tx = ProtectionDomain(
-        "serial_virt_tx", "serial_virt_tx.elf", priority=99
-    )
     uart_driver = ProtectionDomain(
         "serial_driver",
         "serial_driver.elf",
@@ -273,6 +265,13 @@ def generate(
         ethernet_driver.add_map(
             Map(clock_controller, 0x3000000, perms="rw", cached=False)
         )
+    elif board.name == "rpi4b_1gb":
+        # Ethernet driver requires timer access to wait for reconfiguration
+        timer_system.add_client(ethernet_driver)
+
+        mbox = MemoryRegion(sdf, "mbox", 0x10_000, paddr=0xFE00B000)
+        sdf.add_mr(mbox)
+        ethernet_driver.add_map(Map(mbox, 0x3000000, perms="rw", cached=False))
 
     if board.arch == SystemDescription.Arch.X86_64:
         hw_net_rings = SystemDescription.MemoryRegion(
@@ -458,6 +457,7 @@ def generate(
                 core_objs[i - 1]["core"],
                 False,
                 core_objs[i - 1]["children"],
+                pmu_event_ids,
             )
 
     # Finally create the last benchmark PD config
@@ -470,6 +470,7 @@ def generate(
         core_objs[num_cores - 1]["core"],
         True,
         core_objs[num_cores - 1]["children"],
+        pmu_event_ids,
     )
 
     assert serial_system.connect()
@@ -482,6 +483,11 @@ def generate(
     assert client0_lib_sddf_lwip.serialise_config(output_dir)
     assert client1_lib_sddf_lwip.connect()
     assert client1_lib_sddf_lwip.serialise_config(output_dir)
+
+    if board.name == "rpi4b_1gb":
+        update_elf_section(
+            "eth_driver.elf", "timer_client_config", "timer_client_ethernet_driver"
+        )
 
     with open(f"{output_dir}/benchmark_client_config.data", "wb+") as f:
         f.write(bench_client_config.serialise())
@@ -514,6 +520,41 @@ def generate(
         f.write(sdf.render())
 
 
+# ARM PMU event identifier dictionary:
+#
+# The pmu_event_table structure (defined in benchmark.c) lists the set of PMU
+# events the system can be configured to track during a benchmark run. The
+# python dictionary bench_pmu_events encodes this enum. For each enum event x:
+#
+# bench_pmu_events[x][0] = the enum value of x
+# bench_pmu_events[x][1] = any ARM boards listed in BOARDS that DO NOT support
+# benchmark tracking of event x
+#
+# Which PMU events are tracked can be configured by setting the make flag
+# BENCH_PMU_EVENTS to a comma separated list of events.
+#
+# See the echo server README.md for more information, in particular if you wish
+# to track a PMU event which is not currently listed.
+bench_pmu_events = {
+    "L1I_CACHE_MISS": (1, []),
+    "L1I_TLB_MISS": (2, []),
+    "L1D_CACHE_MISS": (3, []),
+    "L1D_CACHE": (4, []),
+    "L1D_TLB_MISS": (5, []),
+    "LOAD_INSTRUCTIONS": (6, []),
+    "STORE_INSTRUCTIONS": (7, []),
+    "INSTRUCTIONS": (8, []),
+    "BRANCH_MISPREDICT": (16, []),
+    "CPU_CYCLES": (17, []),
+    "MEM_ACCESS": (19, []),
+    "CHAIN": (30, []),
+    "STALL_FRONTEND_CACHE": (31, ["rpi4b_1gb"]),
+    "STALL_FRONTEND_TLB": (32, ["rpi4b_1gb"]),
+    "STALL_BACKEND_ILOCK": (33, ["rpi4b_1gb"]),
+    "STALL_BACKEND_LD": (34, ["rpi4b_1gb"]),
+    "STALL_BACKEND_ST": (35, ["rpi4b_1gb"]),
+}
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dtb", required=False)
@@ -523,6 +564,7 @@ if __name__ == "__main__":
     parser.add_argument("--sdf", required=True)
     parser.add_argument("--objcopy", required=True)
     parser.add_argument("--smp", required=True)
+    parser.add_argument("--bench_pmu_events", required=False)
 
     args = parser.parse_args()
 
@@ -543,4 +585,37 @@ if __name__ == "__main__":
         with open(args.dtb, "rb") as f:
             dtb = DeviceTree(f.read())
 
-    generate(args.sdf, args.output, dtb, get_core)
+    if args.bench_pmu_events:
+        pmu_events = args.bench_pmu_events.split(",")
+    else:
+        # If benchmarking PMU events are not provided, we use these default events
+        pmu_events = [
+            "INSTRUCTIONS",
+            "CHAIN",
+            "MEM_ACCESS",
+            "CHAIN",
+            "L1D_CACHE_MISS",
+            "CHAIN",
+        ]
+
+    assert (
+        len(pmu_events) <= 6
+    ), "Supplied more than 6 benchmarking PMU events to track!"
+    pmu_event_ids = []
+    for i in range(len(pmu_events)):
+        if not i % 2:
+            assert (
+                pmu_events[i] != "CHAIN"
+            ), f"Chaining (overflow counting) can only be used by odd counters (selected counter {i})!"
+
+        assert (
+            pmu_events[i] in bench_pmu_events
+        ), f"Selected PMU event {i} ({pmu_events[i]}) is not supported!"
+
+        assert (
+            args.board not in bench_pmu_events[pmu_events[i]][1]
+        ), f"Selected PMU event {i} ({pmu_events[i]}) is not supported by board {args.board}!"
+
+        pmu_event_ids.append(bench_pmu_events[pmu_events[i]][0])
+
+    generate(args.sdf, args.output, dtb, get_core, pmu_event_ids)

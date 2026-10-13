@@ -9,7 +9,6 @@ import sys
 
 from ts_ci import (
     log,
-    matrix_product,
     reset_terminal,
     wait_for_output,
     HardwareBackend,
@@ -43,7 +42,12 @@ def backend_fn(test_config: common.TestConfig, loader_img: Path) -> HardwareBack
 
 
 async def test(backend: HardwareBackend, test_config: common.TestConfig):
-    async with asyncio.timeout(20):
+    timeout = 20
+    if test_config.board.startswith("rpi4b"):
+        # See https://github.com/au-ts/sddf/issues/698 for details
+        timeout = 30
+
+    async with asyncio.timeout(timeout):
         await wait_for_output(backend, b"DHCP request finished")
         dhcp_client1 = await wait_for_output(backend, b"\r\n")
         await wait_for_output(backend, b"DHCP request finished")

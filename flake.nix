@@ -7,9 +7,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    zig-overlay.url = "github:mitchellh/zig-overlay";
-    zig-overlay.inputs.nixpkgs.follows = "nixpkgs";
-    sdfgen.url = "github:au-ts/microkit_sdf_gen/0.28.1";
+    sdfgen.url = "github:au-ts/microkit_sdf_gen/0.35.0";
     sdfgen.inputs.nixpkgs.follows = "nixpkgs";
     systems-ci.url = "github:au-ts/systems-ci/main";
     systems-ci.flake = false;
@@ -18,14 +16,13 @@
   outputs =
     {
       nixpkgs,
-      zig-overlay,
       sdfgen,
       systems-ci,
       ...
     }:
     let
-      microkit-version = "2.1.0-dev.19+cce4a8d";
-      microkit-url = "https://trustworthy.systems/Downloads/microkit/";
+      microkit-version = "2.3.1";
+      microkit-url = "https://github.com/seL4/microkit/releases/download/2.3.1/";
       microkit-platforms = {
         aarch64-darwin = "macos-aarch64";
         x86_64-darwin = "macos-x86-64";
@@ -44,10 +41,8 @@
           };
 
           llvm = pkgs.llvmPackages_18;
-          zig = zig-overlay.packages.${system}."0.15.1";
 
           pysdfgen = sdfgen.packages.${system}.pysdfgen.override {
-            zig = zig;
             pythonPackages = pkgs.python312Packages;
           };
 
@@ -78,6 +73,9 @@
             '';
           });
 
+          # pancake/cakeml compiler
+          pancake = pkgs.callPackage ./ci/cakeml.nix { };
+
           genmc = pkgs.callPackage ./ci/genmc/nix/package.nix { inherit clang-complete; llvm = pkgs.llvmPackages_20.llvm; };
 
           pythonTool = pkgs.python312.withPackages (ps: [
@@ -92,7 +90,14 @@
             ];
           };
 
-          # For building the design documnet
+          spin-models = pkgs.mkShell {
+            nativeBuildInputs = with pkgs; [
+              spin
+              gcc
+            ];
+          };
+
+          # For building the design document
           docs = pkgs.mkShell rec {
             nativeBuildInputs = with pkgs; [
               texliveFull
@@ -114,16 +119,15 @@
               url = "${microkit-url}/microkit-sdk-${microkit-version}-${microkit-platform}.tar.gz";
               hash =
                 {
-                  aarch64-darwin = "sha256-7HdAA4D1EZPoo8H9I86b0igyBoj2BoYy0JlPQicputc=";
-                  x86_64-darwin = "sha256-r9RJORLXjT6VjG9Flav1y0+cnb+T0zeqVptQE9v7lao=";
-                  aarch64-linux = "sha256-iNBYyKWhswK0PokKq5Q/BuJS4vovP9M6KiPT8CIJapU=";
-                  x86_64-linux = "sha256-KlO87zYxajyNSNoTqv5iTGBWB6F7Tey2z7oSF2KyFjM=";
+                  aarch64-darwin = "sha256-UlAFbkVcJWcG+aCDlEK5q60j6+wPVUkQzxmHEM64xZ4=";
+                  x86_64-darwin = "sha256-paHtORN9WeMfK0RyfXYbcEuS21MRASA0ADfpgDvF2Nk=";
+                  aarch64-linux = "sha256-ZmzGNh5T92MZq7l43CywwbklRPN54TdpTx5h3Klbzwg=";
+                  x86_64-linux = "sha256-g4kIyso3X9wUlprpCHCk2TFuMLM9tmpfUDftxSs9yzs=";
                 }
                 .${system} or (throw "Unsupported system: ${system}");
             };
 
             nativeBuildInputs = with pkgs; [
-              zig
               qemu
               gnumake
               dosfstools
@@ -139,6 +143,7 @@
               llvm.libllvm
               dtc
               pythonTool
+              pancake
             ];
 
             # To avoid Nix adding compiler flags that are not available on a freestanding

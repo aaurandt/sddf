@@ -4,12 +4,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 CC := clang
+CXX := clang++
 LD := ld.lld
 RANLIB := llvm-ranlib
 AR := llvm-ar
 OBJCOPY := llvm-objcopy
 OBJDUMP := llvm-objdump
 SIZE := llvm-size
+# clang-cpp may not be available
+CPP := clang -E -
 
 OPTIMISATION ?= -g3 -O2
 

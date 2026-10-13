@@ -16,6 +16,7 @@ SUPPORTED_BOARDS := \
 		    imx8mp_evk \
 			imx8mq_evk \
 		    imx8mp_iotgate \
+			kria_k26 \
 			maaxboard \
 			odroidc2 \
 			odroidc4 \
@@ -23,7 +24,9 @@ SUPPORTED_BOARDS := \
 		    qemu_virt_riscv64 \
 			rock3b \
 			star64 \
-			x86_64_generic
+			x86_64_generic \
+			rpi4b_1gb \
+			zcu102
 
 TOOLCHAIN ?= clang
 MICROKIT_CONFIG ?= debug
@@ -90,11 +93,13 @@ $(SYSTEM_FILE): $(METAPROGRAM) $(IMAGES) $(DTB)
 ifneq ($(strip $(DTS)),)
 	$(PYTHON)\
 	    $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) \
-	    --dtb $(DTB) --output . --sdf $(SYSTEM_FILE) --objcopy $(OBJCOPY) --smp $(SMP_CONFIG)
+	    --dtb $(DTB) --output . --sdf $(SYSTEM_FILE) --objcopy $(OBJCOPY) --smp $(SMP_CONFIG) \
+		$(if $(BENCH_PMU_EVENTS), --bench_pmu_events $(BENCH_PMU_EVENTS))
 else
 	$(PYTHON)\
 	    $(METAPROGRAM) --sddf $(SDDF) --board $(MICROKIT_BOARD) \
-	    --output . --sdf $(SYSTEM_FILE) --objcopy $(OBJCOPY) --smp $(SMP_CONFIG)
+	    --output . --sdf $(SYSTEM_FILE) --objcopy $(OBJCOPY) --smp $(SMP_CONFIG) \
+		$(if $(BENCH_PMU_EVENTS), --bench_pmu_events $(BENCH_PMU_EVENTS))
 endif
 	$(OBJCOPY) --update-section .device_resources=serial_driver_device_resources.data serial_driver.elf
 	$(OBJCOPY) --update-section .serial_driver_config=serial_driver_config.data serial_driver.elf

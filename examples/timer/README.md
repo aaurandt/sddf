@@ -16,6 +16,7 @@ The following platforms are supported:
 * imx8mm_evk
 * imx8mp_evk
 * imx8mq_evk
+* kria_k26
 * maaxboard
 * odroidc2
 * odroidc4
@@ -38,22 +39,6 @@ After building, the system image to load will be `build/loader.img`.
 
 If you wish to simulate on the QEMU virt AArch64 platform, you can append `qemu`
 to your make command after building for qemu_virt_aarch64.
-
-### Zig
-
-You can also build this example with the Zig build system:
-```sh
-zig build -Dsdk=/path/to/sdk -Dboard=<board>
-```
-
-The options for `<board>` are the same as the Makefile.
-
-You can simulate QEMU with:
-```sh
-zig build -Dsdk=/path/to/sdk -Dboard=qemu_virt_aarch64 qemu
-```
-
-The final bootable image will be in `zig-out/bin/loader.img`.
 
 ## Running
 

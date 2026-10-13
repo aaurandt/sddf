@@ -27,6 +27,7 @@ endif
 
 include ${SDDF}/tools/make/board/${MICROKIT_BOARD}.mk
 include ${SDDF}/tools/make/toolchain/${TOOLCHAIN}.mk
+include ${SDDF}/tools/make/toolchain/pancake.mk
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
@@ -56,11 +57,11 @@ eth_driver.elf: ${ETH_DRIV}
 
 # Magic to ensure stuff gets recompiled if we change
 # board name, or use a different Microkit etc.
-CHECK_FLAGS_BOARD_HASH := .board_cflags-$(shell echo -- ${CFLAGS} ${MICROKIT_SDK} ${MICROKIT_BOARD} ${MICROKIT_CONFIG} ${SMP_CONFIG} | shasum | sed 's/ *-//g')
+CHECK_FLAGS_BOARD_HASH := .board_cflags-$(shell echo -- ${CFLAGS} ${MICROKIT_SDK} ${MICROKIT_BOARD} ${MICROKIT_CONFIG} ${SMP_CONFIG} ${BENCH_PMU_EVENTS} | shasum | sed 's/ *-//g')
 
 ${CHECK_FLAGS_BOARD_HASH}:
 	-rm -f .board_cflags-*
 	touch $@
 
 REBUILD_CANDIDATE_OBJECTS := $(shell find . -name '*.o')
-${REBUILD_CANDIDATE_OBJECTS): .EXTRA_PREREQS = ${CHECK_FLAGS_BOARD_HASH}
+${REBUILD_CANDIDATE_OBJECTS}:${CHECK_FLAGS_BOARD_HASH}

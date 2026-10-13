@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <sddf/util/bitarray.h>
 
 /**
@@ -24,16 +25,6 @@ typedef struct fsmalloc {
     uint64_t cell_size; /* number of bytes in a cell */
     uintptr_t base_addr; /* base address of data region */
 } fsmalloc_t;
-
-/**
- * Check if the memory region can fit count more free cells.
- *
- * @param fsmalloc pointer to the fsmalloc struct.
- * @param count number of cells to check.
- *
- * @return true indicates the data region is full, false otherwise.
- */
-bool fsmalloc_full(fsmalloc_t *fsmalloc, uint64_t count);
 
 /**
  * Get count many free cells in the data region.
@@ -64,7 +55,7 @@ void fsmalloc_free(fsmalloc_t *fsmalloc, uintptr_t addr, uint64_t count);
  * @param num_cells number of cells in the data region.
  * @param bitarr pointer to the bitarray struct representing available data cells.
  * @param words pointer to the array of words in bitarray struct.
- * @param num_words number of words in the array of bitarray struct. This needs to be > num_cells/64. Can be calculated using roundup_bits2words64(num_cells).
+ * @param num_words number of words in the array of bitarray struct. This needs to be >= num_cells/64. Can be calculated using BITS_2_WORDS64(num_cells).
  */
 void fsmalloc_init(fsmalloc_t *fsmalloc, uintptr_t base_addr, uint64_t cell_size, uint64_t num_cells,
-                   bitarray_t *bitarr, word_t *words, word_index_t num_words);
+                   bitarray_t *bitarr, uint64_t *words, size_t num_words);

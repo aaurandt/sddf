@@ -23,6 +23,7 @@ CFLAGS_ARCH += \
 endif
 
 CC := ${TRIPLE}-gcc
+CXX := ${TRIPLE}-g++
 AS := ${TRIPLE}-as
 LD := ${TRIPLE}-ld
 RANLIB := ${TRIPLE}-ranlib
@@ -30,6 +31,7 @@ AR := ${TRIPLE}-ar
 OBJCOPY := ${TRIPLE}-objcopy
 OBJDUMP := ${TRIPLE}-objdump
 SIZE := ${TRIPLE}-size
+CPP := ${TRIPLE}-cpp
 
 OPTIMISATION ?= -g -O2
 

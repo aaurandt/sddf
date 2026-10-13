@@ -62,7 +62,7 @@ def generate_example_test_cases(
 EXAMPLES: dict[str, _ExampleMatrixType] = {
     "blk": {
         "configs": ["debug", "release"],
-        "build_systems": ["make", "zig"],
+        "build_systems": ["make"],
         "boards": [
             "maaxboard",
             "qemu_virt_aarch64",
@@ -73,7 +73,7 @@ EXAMPLES: dict[str, _ExampleMatrixType] = {
     },
     "i2c": {
         "configs": ["debug", "release"],
-        "build_systems": ["make", "zig"],
+        "build_systems": ["make"],
         "boards": ["odroidc4"],
         "tests_exclude": [],
     },
@@ -81,7 +81,13 @@ EXAMPLES: dict[str, _ExampleMatrixType] = {
     # attached.
     "i2c_bus_scan": {
         "configs": ["debug", "release"],
-        "build_systems": ["make", "zig"],
+        "build_systems": ["make"],
+        "boards": ["serengeti"],
+        "tests_exclude": [],
+    },
+    "ina219": {
+        "configs": ["debug", "release"],
+        "build_systems": ["make"],
         "boards": ["serengeti"],
         "tests_exclude": [],
     },
@@ -94,35 +100,42 @@ EXAMPLES: dict[str, _ExampleMatrixType] = {
             "imx8mp_evk",
             "imx8mp_iotgate",
             "maaxboard",
+            "kria_k26",
             "odroidc2",
             "odroidc4",
             "qemu_virt_aarch64",
             "qemu_virt_riscv64",
             "rock3b",
+            "rpi4b_1gb",
             "star64",
             "x86_64_generic",
+            "zcu102",
         ],
         "tests_exclude": [
             # not in machine queue
             {"board": "imx8mp_evk"},
             {"board": "rock3b"},
+            {"board": "kria_k26"},
         ],
     },
     "serial": {
         "configs": ["debug", "release"],
-        "build_systems": ["make", "zig"],
+        "build_systems": ["make"],
         "boards": [
             "cheshire",
             "hifive_p550",
             "imx8mm_evk",
             "imx8mq_evk",
             "imx8mp_evk",
+            "imx8mp_iotgate",
+            "kria_k26",
             "maaxboard",
             "odroidc2",
             "odroidc4",
             "qemu_virt_aarch64",
             "qemu_virt_riscv64",
             "rock3b",
+            "rockpro64",
             "rpi4b_1gb",
             "serengeti",
             "star64",
@@ -134,14 +147,18 @@ EXAMPLES: dict[str, _ExampleMatrixType] = {
             {"board": "cheshire"},
             {"board": "imx8mp_evk"},
             {"board": "rock3b"},
+            {"board": "kria_k26"},
         ],
     },
     "timer": {
         "configs": ["debug", "release"],
-        "build_systems": ["make", "zig"],
+        "build_systems": ["make"],
         "boards": [
+            "imx8mm_evk",
             "imx8mq_evk",
             "imx8mp_evk",
+            "imx8mp_iotgate",
+            "kria_k26",
             "maaxboard",
             "odroidc2",
             "odroidc4",
@@ -160,6 +177,32 @@ EXAMPLES: dict[str, _ExampleMatrixType] = {
             # not in machine queue
             {"board": "imx8mp_evk"},
             {"board": "rock3b"},
+            {"board": "kria_k26"},
+        ],
+    },
+    "vswitch": {
+        "configs": ["debug", "release"],
+        "build_systems": ["make"],
+        "boards": [
+            "imx8mm_evk",
+            "imx8mq_evk",
+            "imx8mp_evk",
+            "imx8mp_iotgate",
+            "maaxboard",
+            "odroidc2",
+            "odroidc4",
+            "qemu_virt_aarch64",
+            "qemu_virt_riscv64",
+            "rock3b",
+            "rpi4b_1gb",
+            "star64",
+            "x86_64_generic",
+            "zcu102",
+        ],
+        "tests_exclude": [
+            # not in machine queue
+            {"board": "imx8mp_evk"},
+            {"board": "rock3b"},
         ],
     },
 }
@@ -172,11 +215,13 @@ _BoardNames = Literal[
     "imx8mp_evk",
     "imx8mq_evk",
     "imx8mp_iotgate",
+    "kria_k26",
     "maaxboard",
     "odroidc2",
     "odroidc4",
     "rpi4b_1gb",
     "rock3b",
+    "rockpro64",
     "serengeti",
     "star64",
     "qemu_virt_aarch64",
@@ -194,6 +239,7 @@ known_board_names = set(MACHINE_QUEUE_BOARDS.keys()) | {
     "imx8mp_evk",
     "rock3b",
     "cheshire",
+    "kria_k26",
 }
 assert (
     set(_BoardNames.__args__) <= known_board_names  # type: ignore
@@ -208,6 +254,6 @@ for ex in EXAMPLES.values():
 
 class _ExampleMatrixType(TypedDict):
     configs: list[Literal["debug", "release", "benchmark"]]
-    build_systems: list[Literal["make", "zig"]]
+    build_systems: list[Literal["make"]]
     boards: list[_BoardNames]
     tests_exclude: list[dict[str, str]]

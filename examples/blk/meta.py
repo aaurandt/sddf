@@ -5,14 +5,11 @@ import argparse
 from typing import List, Optional
 from dataclasses import dataclass
 from sdfgen import SystemDescription, Sddf, DeviceTree
-from importlib.metadata import version
 
 sys.path.append(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../tools/meta")
 )
 from board import BOARDS
-
-assert version("sdfgen").split(".")[1] == "28", "Unexpected sdfgen version"
 
 ProtectionDomain = SystemDescription.ProtectionDomain
 
@@ -82,40 +79,93 @@ def generate(
     partition = int(args.partition) if args.partition else board.partition
     blk_system.add_client(client, partition=partition)
 
-    if board.arch == SystemDescription.Arch.X86_64:
-        if nvme:
+    if nvme:
+        # Queue descriptors accessed via DMA so we map these regions as uncached.
+        if board.arch == SystemDescription.Arch.RISCV64:
+            dma_regions = [
+                ("nvme_admin_sq", 0x9EDF0000, 0x20100000, 0x1000),
+                ("nvme_admin_cq", 0x9EDF1000, 0x20101000, 0x1000),
+                ("nvme_io_sq", 0x9EDF2000, 0x20102000, 0x1000),
+                ("nvme_io_cq", 0x9EDF3000, 0x20103000, 0x1000),
+                ("nvme_identify", 0x9EDF4000, 0x20104000, 0x2000),
+                ("nvme_prp_list", 0x9F800000, 0x20200000, 0x80000),
+            ]
+        else:
+            dma_regions = [
+                ("nvme_admin_sq", 0x5EDF0000, 0x20100000, 0x1000),
+                ("nvme_admin_cq", 0x5EDF1000, 0x20101000, 0x1000),
+                ("nvme_io_sq", 0x5EDF2000, 0x20102000, 0x1000),
+                ("nvme_io_cq", 0x5EDF3000, 0x20103000, 0x1000),
+                ("nvme_identify", 0x5EDF4000, 0x20104000, 0x2000),
+                ("nvme_prp_list", 0x5F800000, 0x20200000, 0x80000),
+            ]
+        for name, paddr, vaddr, size in dma_regions:
+            mr = SystemDescription.MemoryRegion(sdf, name, size, paddr=paddr)
+            sdf.add_mr(mr)
+            blk_driver.add_map(SystemDescription.Map(mr, vaddr, "rw", cached=False))
+
+        if board.arch == SystemDescription.Arch.X86_64:
+            # BAR0: MMIO (always uncached)
             nvme_bar0_mr = SystemDescription.MemoryRegion(
                 sdf, "nvme_bar0", 0x4000, paddr=0xFEBD4000
             )
-            sdf.add_mr(nvme_bar0_mr)
-            nvme_bar0_map = SystemDescription.Map(
-                nvme_bar0_mr, 0x20000000, "rw", cached=False
-            )
-            blk_driver.add_map(nvme_bar0_map)
-
-            # Metadata (ASQ/ACQ, etc.)
-            nvme_metadata_mr = SystemDescription.MemoryRegion(
-                sdf, "nvme_metadata", 0x10000, paddr=0x5FFF0000
-            )
-            sdf.add_mr(nvme_metadata_mr)
-            nvme_metadata_map = SystemDescription.Map(
-                nvme_metadata_mr, 0x20100000, "rw", cached=False
-            )
-            blk_driver.add_map(nvme_metadata_map)
-
-            # Data Region
-            data_region_mr = SystemDescription.MemoryRegion(
-                sdf, "data_region", 0x200000, paddr=0x5FDF0000
-            )
-            sdf.add_mr(data_region_mr)
-            data_region_map = SystemDescription.Map(data_region_mr, 0x20200000, "rw")
-            blk_driver.add_map(data_region_map)
 
             # IRQ
             nvme_irq = SystemDescription.IrqIoapic(ioapic_id=0, pin=10, vector=1, id=17)
-            blk_driver.add_irq(nvme_irq)
 
-        else:
+        elif board.arch == SystemDescription.Arch.AARCH64:
+            # BAR0: MMIO (always uncached)
+            nvme_bar0_mr = SystemDescription.MemoryRegion(
+                sdf, "nvme_bar0", 0x4000, paddr=0x10000000
+            )
+
+            # ECAM config page: MMIO (always uncached)
+            nvme_ecam_mr = SystemDescription.MemoryRegion(
+                sdf, "nvme_ecam", 0x1000, paddr=0x4010020000
+            )
+            sdf.add_mr(nvme_ecam_mr)
+            blk_driver.add_map(
+                SystemDescription.Map(nvme_ecam_mr, 0x20300000, "rw", cached=False)
+            )
+
+            # IRQ: slot 4 INT_A -> PCI irq line (1+4)%4 = 1 -> SPI 3 -> GIC IRQ 35
+            nvme_irq = SystemDescription.IrqConventional(irq=35, id=35)
+
+        else:  # board.arch == SystemDescription.Arch.RISCV64:
+            # BAR0: MMIO (always uncached)
+            nvme_bar0_mr = SystemDescription.MemoryRegion(
+                sdf, "nvme_bar0", 0x4000, paddr=0x40000000
+            )
+
+            # ECAM config page: MMIO (always uncached)
+            nvme_ecam_mr = SystemDescription.MemoryRegion(
+                sdf, "nvme_ecam", 0x1000, paddr=0x30020000
+            )
+            sdf.add_mr(nvme_ecam_mr)
+            blk_driver.add_map(
+                SystemDescription.Map(nvme_ecam_mr, 0x20300000, "rw", cached=False)
+            )
+
+            # IRQ: slot 4 INT_A -> PCI irq line (0+4)%4 = 0 -> PLIC IRQ 0x20 = 32
+            nvme_irq = SystemDescription.IrqConventional(irq=32, id=32)
+
+        sdf.add_mr(nvme_bar0_mr)
+        blk_driver.add_map(
+            SystemDescription.Map(nvme_bar0_mr, 0x20000000, "rw", cached=False)
+        )
+
+        blk_driver.add_irq(nvme_irq)
+
+    if board.arch == SystemDescription.Arch.X86_64:
+        # IO ports
+        pci_config_addr_port = SystemDescription.IoPort(0xCF8, 4, 1)
+        blk_driver.add_ioport(pci_config_addr_port)
+
+        pci_config_data_port = SystemDescription.IoPort(0xCFC, 4, 2)
+        blk_driver.add_ioport(pci_config_data_port)
+
+        # x86 virtio regions
+        if not nvme:
             blk_requests_mr = SystemDescription.MemoryRegion(
                 sdf, "virtio_requests", 65536, paddr=0x5FDF0000
             )
@@ -145,12 +195,6 @@ def generate(
                 ioapic_id=0, pin=11, vector=1, id=17
             )
             blk_driver.add_irq(virtio_blk_irq)
-
-        pci_config_addr_port = SystemDescription.IoPort(0xCF8, 4, 1)
-        blk_driver.add_ioport(pci_config_addr_port)
-
-        pci_config_data_port = SystemDescription.IoPort(0xCFC, 4, 2)
-        blk_driver.add_ioport(pci_config_data_port)
 
     serial_system.add_client(client)
 

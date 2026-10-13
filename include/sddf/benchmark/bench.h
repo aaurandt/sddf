@@ -32,3 +32,11 @@ struct bench {
     /* Cycles attributed to the idle thread */
     uint64_t idle_ccount;
 };
+
+/**
+ * On the ARM CPUs we use, there are 6 32-bit counters available for tracking
+ * PMU events. PMU events can be selected using the BENCH_PMU_EVENTS make flag
+ * or in the metaprogram. The selected events are serialised and copied into the
+ * benchmark PD's ELF file.
+ */
+#define BENCHMARK_MAX_PMU_EVENTS 6

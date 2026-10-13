@@ -50,21 +50,19 @@ LIB_SDDF_LWIP_LWIP_FILES := \
 LIB_SDDF_LWIP_LWIP_FILES := $(subst $(LWIPDIR)/,,$(LIB_SDDF_LWIP_LWIP_FILES))
 
 lib_sddf_lwip.a: lib_sddf_lwip_out/lib_sddf_lwip.o $(addprefix lib_sddf_lwip_out/, $(LIB_SDDF_LWIP_LWIP_FILES:.c=.o))
-	$(AR) rv $@ $^
+	$(AR) crv $@ $^
 	$(RANLIB) $@
 
 lib_sddf_lwip%.a: lib_sddf_lwip_out%/lib_sddf_lwip.o $(addprefix lib_sddf_lwip_out%/, $(LIB_SDDF_LWIP_LWIP_FILES:.c=.o))
-	$(AR) rv $@ $^
+	$(AR) crv $@ $^
 	$(RANLIB) $@
 
 lib_sddf_lwip_out/lib_sddf_lwip.o: CFLAGS += $(LIB_SDDF_LWIP_CFLAGS)
-lib_sddf_lwip_out/lib_sddf_lwip.o: $(CHECK_FLAGS_BOARD_MD5)
 lib_sddf_lwip_out/lib_sddf_lwip.o: $(LIB_SDDF_LWIP_DIR)/lib_sddf_lwip.c | $(SDDF_LIBC_INCLUDE)
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 lib_sddf_lwip_out%/lib_sddf_lwip.o: CFLAGS += $(LIB_SDDF_LWIP_CFLAGS$*)
-lib_sddf_lwip_out%/lib_sddf_lwip.o: $(CHECK_FLAGS_BOARD_MD5)
 lib_sddf_lwip_out%/lib_sddf_lwip.o: $(LIB_SDDF_LWIP_DIR)/lib_sddf_lwip.c | $(SDDF_LIBC_INCLUDE)
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<

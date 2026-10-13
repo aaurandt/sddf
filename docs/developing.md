@@ -13,6 +13,12 @@ class for sDDF.
 Please feel free to open an issue on GitHub if there is something missing or
 something is not clear.
 
+We use an **ownership system** to manage code review for this repository. When opening
+a pull request, please consult `MAINTAINERS.md` to see who you should request review from.
+
+If changing `MAINTAINERS.md`, ensure that you do this via a pull request and receive
+approval from anybody who is added, changed, or removed from the list.
+
 ## Examples
 
 For each device class in sDDF, we have an example system in `examples/` to show
@@ -359,11 +365,7 @@ other driver code.
 
 ### Build system
 
-sDDF works with two build systems, GNU Make and Zig.
-
-Make is the primary build-system, if you are unfamiliar with Zig you won't lose
-out on anything. We do however aim to keep both the Makefiles and Zig builds
-capable of building all the parts of sDDF.
+sDDF works with GNU Make.
 
 There is a snippet system for the Makefiles and so each driver will have its own
 `.mk` file for building itself. You can base your driver's snippet on other ones
